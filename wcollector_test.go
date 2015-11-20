@@ -58,7 +58,7 @@ func TestJsonProcessing(t *testing.T) {
 		t.Errorf("Got %d measurements, want %d", len(weather.measurements), 2)
 	}
 
-	lazyMonkeyPatchDewPoint(&weather)
+	lazyMonkeyPatchDewPoint(weather)
 	if 3 != len(weather.measurements) {
 		t.Error("Failed to monkey patch dew point")
 	}

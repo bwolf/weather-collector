@@ -94,15 +94,15 @@ func measurementConsumer(stationId int, meas *Measurement) error {
 	return nil
 }
 
-func calcDewPoint(h, t float64) float64 {
+func calcDewPoint(humid, temp float64) float64 {
 	m := 17.62
 	tn := 243.12
 
-	if t <= 0 {
+	if temp <= 0 {
 		m = 22.46
 		tn = 272.62
 	}
-	k := (math.Log10(h)-2)/0.4343 + (m*t)/(tn+t)
+	k := (math.Log10(humid)-2)/0.4343 + (m*temp)/(tn+temp)
 	return tn * k / (m - k)
 }
 
@@ -146,7 +146,9 @@ func lazyMonkeyPatchDewPoint(weather *Weather) {
 
 	if gotRhTrue && gotTemp {
 		dp := calcDewPoint(rhTrue.value, temp.value)
-		fmt.Printf("Dew point from h %f, t %f: %f will be patched in\n", rhTrue.value, temp.value, dp)
+		fmt.Printf("Dew point from h %f, t %f: %f will be patched in\n",
+			rhTrue.value, temp.value, dp)
+
 		weather.measurements = append(weather.measurements,
 			Measurement{name: "dew_point", value: dp})
 	} else {
@@ -154,12 +156,12 @@ func lazyMonkeyPatchDewPoint(weather *Weather) {
 	}
 }
 
-func parseWeather(js interface{}) (error, Weather) {
+func parseWeather(js interface{}) (error, *Weather) {
 	m := js.(map[string]interface{})
 
 	rawWeather, ok := m["weather"]
 	if !ok {
-		return fmt.Errorf("No weather in Json %v", js), Weather{}
+		return fmt.Errorf("No weather in Json %v", js), nil
 	}
 
 	weather := Weather{}
@@ -167,9 +169,9 @@ func parseWeather(js interface{}) (error, Weather) {
 	for k, v := range weatherMap {
 		switch vv := v.(type) {
 		case string:
-			return fmt.Errorf("%s is unsupported string %s", k, vv), Weather{}
+			return fmt.Errorf("%s is unsupported string %s", k, vv), nil
 		case int:
-			return fmt.Errorf("%s is unsupported int %d", k, vv), Weather{}
+			return fmt.Errorf("%s is unsupported int %d", k, vv), nil
 		case float64:
 			fmt.Println(k, "is float64", vv)
 			if k == "station-id" { // Decoded as float64, also look like int
@@ -179,14 +181,13 @@ func parseWeather(js interface{}) (error, Weather) {
 				weather.measurements = append(weather.measurements, meas)
 			}
 		default:
-			return fmt.Errorf("%s is of unsupported type %v", k, vv), Weather{}
+			return fmt.Errorf("%s is of unsupported type %v", k, vv), nil
 		}
 	}
 
 	// Ensure there is a station-id in weather
 	if weather.stationId == 0 {
-		return fmt.Errorf("Missing 'station-id' in weather dataset %v", rawWeather),
-			Weather{}
+		return fmt.Errorf("Missing 'station-id' in weather dataset %v", rawWeather), nil
 	}
 
 	weather.measurements = transformMeasurements(weather.measurements)
@@ -194,7 +195,7 @@ func parseWeather(js interface{}) (error, Weather) {
 
 	fmt.Printf("Parsed weather %+v\n", weather)
 
-	return nil, weather
+	return nil, &weather
 }
 
 func parseJson(rawInput []byte) (error, interface{}) {
@@ -239,7 +240,7 @@ func main() {
 				log.Fatalf("Cannot parse weather %v", err)
 			}
 			log.Print("Lazy patching in dew point")
-			lazyMonkeyPatchDewPoint(&weather)
+			lazyMonkeyPatchDewPoint(weather)
 			fmt.Printf("%+v\n", weather)
 			// TODO consume weather
 		}
