@@ -1,5 +1,7 @@
 package main
 
+// TODO use proper logging instaed of fmt.Print
+
 import (
 	"bytes"
 	"encoding/json"
@@ -208,6 +210,19 @@ func parseJson(rawInput []byte) (error, interface{}) {
 	}
 	fmt.Printf("Valid: '%s'\n", js)
 	return nil, js
+}
+
+// ---------------------------------------------------------------------
+// InfluxDB client
+
+type InfluxDbClient struct {
+	baseURL string // TODO use URL type if possible
+	port    int
+	dbName  string
+}
+
+func NewInfluxDbClient(baseURL string, port int, dbName string) *InfluxDbClient {
+	return &InfluxDbClient{baseURL, port, dbName}
 }
 
 // ---------------------------------------------------------------------
