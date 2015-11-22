@@ -79,3 +79,17 @@ func TestJsonProcessing(t *testing.T) {
 		}
 	}
 }
+
+// func TestInfluxDbClient(t *testing.T) {
+// 	client := NewWeatherDbClient("localhost", 8086, "weather")
+// 	client.AddValue(1, "temp", 3.45)
+// 	client.AddValue(1, "rh_true", 90.9)
+// 	if err := client.Post(); err != nil {
+// 		t.Errorf("Http POST failed: %v", err)
+// 	}
+
+// 	client.AddValue(1, "pressure_nn", 999)
+// 	if err := client.Post(); err != nil {
+// 		t.Errorf("Http POST failed: %v", err)
+// 	}
+// }

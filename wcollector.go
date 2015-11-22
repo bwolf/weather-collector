@@ -7,13 +7,19 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/bwolf/suncal"
 	"github.com/tarm/serial"
+	"io"
 	"log"
 	"math"
+	"net/http"
 	"os"
 	"path"
 	"strings"
+	"time"
 )
+
+const ()
 
 // ---------------------------------------------------------------------
 // Metric Sytem
@@ -53,19 +59,19 @@ func openUart(device string, baud int) *serial.Port {
 	c := &serial.Config{Name: device, Baud: baud}
 	s, err := serial.OpenPort(c)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatalf("Can't open serial device %s: %v", device, err)
 	}
 	return s
 }
 
-func readlineCR(port *serial.Port) []byte {
+func readlineCR(port *serial.Port) ([]byte, error) {
 	buf := make([]byte, 0)
 	idx := 0
 	for {
-		chbuf := make([]byte, 1)
+		chbuf := make([]byte, 1)   // TODO empty array also works?
 		n, err := port.Read(chbuf) // TODO n is ignored
 		if err != nil || n != 1 {
-			log.Fatal(err) // TODO fixme, just return an error
+			return nil, err
 		}
 
 		ch := chbuf[0]
@@ -73,8 +79,7 @@ func readlineCR(port *serial.Port) []byte {
 		idx++
 
 		if len(buf) > 2 && buf[len(buf)-2] == '\r' && buf[len(buf)-1] == '\n' {
-			// return string(buf[:idx])
-			return buf[:idx]
+			return buf[:idx], nil
 		}
 	}
 }
@@ -153,8 +158,6 @@ func lazyMonkeyPatchDewPoint(weather *Weather) {
 
 		weather.measurements = append(weather.measurements,
 			Measurement{name: "dew_point", value: dp})
-	} else {
-		fmt.Println("Not patching in dew-point")
 	}
 }
 
@@ -193,45 +196,82 @@ func parseWeather(js interface{}) (error, *Weather) {
 	}
 
 	weather.measurements = transformMeasurements(weather.measurements)
-	fmt.Printf("Transformed %+v\n", weather)
-
-	fmt.Printf("Parsed weather %+v\n", weather)
+	logger.Printf("Transformed %+v\n", weather)
 
 	return nil, &weather
 }
 
 func parseJson(rawInput []byte) (error, interface{}) {
-	fmt.Printf("Attempt to parse '%s' as json\n", rawInput)
+	logger.Printf("Attempt to parse '%s' as json\n", rawInput)
 	var js interface{}
 	err := json.Unmarshal(rawInput, &js)
 	if err != nil {
-		fmt.Printf("Invalid JSON: %v\n", err)
+		logger.Printf("Invalid JSON: %v\n", err)
 		return err, nil
 	}
-	fmt.Printf("Valid: '%s'\n", js)
+	logger.Printf("Valid: '%s'\n", js)
 	return nil, js
 }
 
 // ---------------------------------------------------------------------
-// InfluxDB client
+// Weather db (InfluxDB) client
 
-type InfluxDbClient struct {
-	baseURL string // TODO use URL type if possible
-	port    int
-	dbName  string
+type WeatherDbClient struct {
+	influxUrl string
+	data      bytes.Buffer
 }
 
-func NewInfluxDbClient(baseURL string, port int, dbName string) *InfluxDbClient {
-	return &InfluxDbClient{baseURL, port, dbName}
+func NewWeatherDbClient(host string, port int, dbName string) *WeatherDbClient {
+	url := fmt.Sprintf("http://%s:%d/write?db=%s", host, port, dbName)
+	return &WeatherDbClient{influxUrl: url}
+}
+
+// see https://influxdb.com/docs/v0.9/guides/writing_data.html
+func (weatherDb *WeatherDbClient) AddValue(stationId int, key string, value float64) {
+	fmt.Fprintf(&weatherDb.data, "%s,station=%d value=%f\n", key, stationId, value)
+}
+
+// func (weatherDb *WeatherDbClient) AddValueFlags(stationId int, key string, value float64, flags map[string]string) {
+// 	// fmt.Fprintf(&weatherDb.data, ""
+// 	var buf = bytes.NewBufferString("")
+// 	for k, v := range flags {
+// 		if buf.Len() > 0 {
+// 			buf.WriteString(",")
+// 		}
+// 		fmt.Fprintf(buf, "%s=%s", k, v)
+// 	}
+// 	fmt.Fprintf(&weatherDb.data, "%s,station=%d,%s value=%f\n
+// }
+
+func (weatherDb *WeatherDbClient) Post() error {
+	resp, err := http.Post(weatherDb.influxUrl, "text/plain", &weatherDb.data)
+	if err != nil {
+		return fmt.Errorf("HTTP POST failed to InfluxDB: %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("HTTP POST failed to InfluxDB: %s\n", resp.Status)
+	}
+
+	weatherDb.data.Reset()
+
+	return nil
 }
 
 // ---------------------------------------------------------------------
 // Main entry point
 
+var logger *log.Logger
+
 func main() {
-	// verbose := flag.Bool("verbose", false, "verbose processing")
-	device := flag.String("device", "/dev/ttyAMA0", "Device or filename")
-	baud := flag.Int("baud", 4800, "Baudrate")
+	// Flag setup
+	verbose := flag.Bool("verbose", false, "Verbose processing (default false)")
+	device := flag.String("device", "/dev/ttyAMA0", "Device or filename (default ttyAMA0)")
+	baud := flag.Int("baud", 4800, "Baudrate of serial device (default 4800)")
+	lat := flag.Float64("latitude", 47.89681, "Latitude (default Erlkam/Germany)")
+	lon := flag.Float64("longitude", 11.69945, "Longitude (default Erlkam/Germany)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s\n", path.Base(os.Args[0]))
@@ -239,25 +279,66 @@ func main() {
 	}
 	flag.Parse()
 
+	// Logging setup
+	logfilename := "wcollector.log"
+	logfile, err := os.OpenFile(logfilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Panicf("Failed to open logfile %s for writing: %v\n", logfilename, err)
+	}
+	defer logfile.Close()
+
+	var logwriter io.Writer = logfile
+	if *verbose {
+		logwriter = io.MultiWriter(logfile, os.Stdout)
+	}
+	logger = log.New(logwriter, "[wcollector] ", log.LstdFlags)
+	log.Println("Starting up")
+
+	// TODO reopen logfile on SIGHUP or some other signal
+
+	coords := suncal.GeoCoordinates{Latitude: *lat, Longitude: *lon}
+	info := suncal.SunCal(coords, time.Now())
+	logger.Printf("Sun info %+v\n", info)
+
+	// TODO periodically check for sunrise, sunset in influxdb and create them
+	//      if missing; Chose a period of 12 hours to perform the query, but query
+	//      immediately when the application starts
+	//      or create a separate program to perform this?
+
+	// say := func(s string) {
+	// for i := 0; i < 5; i++ {
+	// time.Sleep(100 * time.Millisecond)
+	// fmt.Println(s)
+	// }
+	// }
+
+	// go say("hello")
+	// time.Sleep(100 * time.Second)
+
+	cli := NewWeatherDbClient("localhost", 8086, "weather")
+	// cli.AddValue("stationId", "sun", value float64)
+
+	// Main logic
 	ss := openUart(*device, *baud)
 	defer ss.Close()
 	for {
-		line := readlineCR(ss)
-		line = bytes.TrimSpace(line)
-		if !bytes.HasPrefix(line, []byte("# ")) {
-			err, json := parseJson(line)
-			if err != nil {
-				// TODO don't fatal/exit here
-				log.Fatal(fmt.Sprintf("Cannot process line '%s', because of: %v", line, err))
+		line, err := readlineCR(ss)
+		if err == nil {
+			line = bytes.TrimSpace(line)
+			if !bytes.HasPrefix(line, []byte("# ")) {
+				err, json := parseJson(line)
+				if err != nil {
+					logger.Printf("Cannot process line '%s', because of: %v", line, err)
+				}
+				err, weather := parseWeather(json)
+				if err != nil {
+					logger.Printf("Cannot parse weather %v", err)
+				}
+				logger.Println("Lazy patching in dew point")
+				lazyMonkeyPatchDewPoint(weather)
+				logger.Printf("Patched %+v\n", weather)
+				// TODO consume weather
 			}
-			err, weather := parseWeather(json)
-			if err != nil {
-				log.Fatalf("Cannot parse weather %v", err)
-			}
-			log.Print("Lazy patching in dew point")
-			lazyMonkeyPatchDewPoint(weather)
-			fmt.Printf("%+v\n", weather)
-			// TODO consume weather
 		}
 	}
 }
