@@ -2,10 +2,17 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	logger = log.New(os.Stdout, "[test] ", log.LstdFlags)
+	os.Exit(m.Run())
+}
 
 func TestMetricSystem(t *testing.T) {
 	const num float64 = 6.25
@@ -40,7 +47,7 @@ func TestCalcDewPoint(t *testing.T) {
 }
 
 func TestJsonProcessing(t *testing.T) {
-	data := []byte(`{"weather": {"station-id": 1, "temp_m": 1002, "rh-true_m": 9001}}`)
+	data := []byte(`{"weather": {"station-id": 1, "temp_m": 1002, "rh-true_m": 9001, "rain-cupfills": 1}}`)
 	err, json := parseJson(data)
 	if err != nil {
 		t.Errorf("Json parse failed %v", err)
@@ -54,12 +61,13 @@ func TestJsonProcessing(t *testing.T) {
 		t.Errorf("stationId != 1, got %d", weather.stationId)
 	}
 
-	if 2 != len(weather.measurements) {
+	if 3 != len(weather.measurements) {
 		t.Errorf("Got %d measurements, want %d", len(weather.measurements), 2)
 	}
 
+	orignalLength := len(weather.measurements)
 	lazyMonkeyPatchDewPoint(weather)
-	if 3 != len(weather.measurements) {
+	if 1+orignalLength != len(weather.measurements) {
 		t.Error("Failed to monkey patch dew point")
 	}
 	haveDewPoint := false
@@ -79,17 +87,3 @@ func TestJsonProcessing(t *testing.T) {
 		}
 	}
 }
-
-// func TestInfluxDbClient(t *testing.T) {
-// 	client := NewWeatherDbClient("localhost", 8086, "weather")
-// 	client.AddValue(1, "temp", 3.45)
-// 	client.AddValue(1, "rh_true", 90.9)
-// 	if err := client.Post(); err != nil {
-// 		t.Errorf("Http POST failed: %v", err)
-// 	}
-
-// 	client.AddValue(1, "pressure_nn", 999)
-// 	if err := client.Post(); err != nil {
-// 		t.Errorf("Http POST failed: %v", err)
-// 	}
-// }

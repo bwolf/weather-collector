@@ -1,13 +1,10 @@
 package main
 
-// TODO use proper logging instaed of fmt.Print
-
 import (
 	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/bwolf/suncal"
 	"github.com/tarm/serial"
 	"io"
 	"log"
@@ -16,7 +13,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 )
 
 const ()
@@ -117,7 +113,8 @@ func normalizeMeasurement(m *Measurement) *Measurement {
 	index := strings.LastIndex(m.name, "_")
 	if index == -1 {
 		fmt.Println("Nothing to normalize for key", m.name)
-		return m
+		newName := strings.Replace(m.name, "-", "_", -1)
+		return &Measurement{name: newName, value: m.value}
 	}
 	metricPrefix := m.name[index+1:]
 	newName := strings.Replace(m.name[0:index], "-", "_", -1)
@@ -231,18 +228,6 @@ func (weatherDb *WeatherDbClient) AddValue(stationId int, key string, value floa
 	fmt.Fprintf(&weatherDb.data, "%s,station=%d value=%f\n", key, stationId, value)
 }
 
-// func (weatherDb *WeatherDbClient) AddValueFlags(stationId int, key string, value float64, flags map[string]string) {
-// 	// fmt.Fprintf(&weatherDb.data, ""
-// 	var buf = bytes.NewBufferString("")
-// 	for k, v := range flags {
-// 		if buf.Len() > 0 {
-// 			buf.WriteString(",")
-// 		}
-// 		fmt.Fprintf(buf, "%s=%s", k, v)
-// 	}
-// 	fmt.Fprintf(&weatherDb.data, "%s,station=%d,%s value=%f\n
-// }
-
 func (weatherDb *WeatherDbClient) Post() error {
 	resp, err := http.Post(weatherDb.influxUrl, "text/plain", &weatherDb.data)
 	if err != nil {
@@ -265,13 +250,21 @@ func (weatherDb *WeatherDbClient) Post() error {
 
 var logger *log.Logger
 
+func storeWeather(db *WeatherDbClient, weather *Weather) error {
+	for _, meas := range weather.measurements {
+		db.AddValue(weather.stationId, meas.name, meas.value)
+	}
+	return db.Post()
+}
+
 func main() {
 	// Flag setup
 	verbose := flag.Bool("verbose", false, "Verbose processing (default false)")
 	device := flag.String("device", "/dev/ttyAMA0", "Device or filename (default ttyAMA0)")
 	baud := flag.Int("baud", 4800, "Baudrate of serial device (default 4800)")
-	lat := flag.Float64("latitude", 47.89681, "Latitude (default Erlkam/Germany)")
-	lon := flag.Float64("longitude", 11.69945, "Longitude (default Erlkam/Germany)")
+	influxHost := flag.String("influxhost", "localhost", "Influxdb hostname")
+	influxPort := flag.Int("influxport", 8086, "Influxdb port")
+	influxDb := flag.String("influxdbname", "weather", "Influxdb DB name")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s\n", path.Base(os.Args[0]))
@@ -296,27 +289,7 @@ func main() {
 
 	// TODO reopen logfile on SIGHUP or some other signal
 
-	coords := suncal.GeoCoordinates{Latitude: *lat, Longitude: *lon}
-	info := suncal.SunCal(coords, time.Now())
-	logger.Printf("Sun info %+v\n", info)
-
-	// TODO periodically check for sunrise, sunset in influxdb and create them
-	//      if missing; Chose a period of 12 hours to perform the query, but query
-	//      immediately when the application starts
-	//      or create a separate program to perform this?
-
-	// say := func(s string) {
-	// for i := 0; i < 5; i++ {
-	// time.Sleep(100 * time.Millisecond)
-	// fmt.Println(s)
-	// }
-	// }
-
-	// go say("hello")
-	// time.Sleep(100 * time.Second)
-
-	cli := NewWeatherDbClient("localhost", 8086, "weather")
-	// cli.AddValue("stationId", "sun", value float64)
+	db := NewWeatherDbClient(*influxHost, *influxPort, *influxDb)
 
 	// Main logic
 	ss := openUart(*device, *baud)
@@ -328,16 +301,19 @@ func main() {
 			if !bytes.HasPrefix(line, []byte("# ")) {
 				err, json := parseJson(line)
 				if err != nil {
-					logger.Printf("Cannot process line '%s', because of: %v", line, err)
+					logger.Printf("Cannot process line '%s', because of: %v\n", line, err)
 				}
 				err, weather := parseWeather(json)
 				if err != nil {
-					logger.Printf("Cannot parse weather %v", err)
+					logger.Printf("Cannot parse weather %v\n", err)
 				}
 				logger.Println("Lazy patching in dew point")
 				lazyMonkeyPatchDewPoint(weather)
 				logger.Printf("Patched %+v\n", weather)
-				// TODO consume weather
+
+				if err := storeWeather(db, weather); err != nil {
+					logger.Printf("Failed storing values: %v\n", err)
+				}
 			}
 		}
 	}
