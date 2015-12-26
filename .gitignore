@@ -3,3 +3,5 @@
 /wcollector
 /wcollector.test
 *.log
+/.idea/
+*.iml
