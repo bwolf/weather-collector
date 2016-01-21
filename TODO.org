@@ -1,0 +1,35 @@
+#+TITLE: TODO
+#+DATE: <2016-01-21 Thu>
+#+AUTHOR: Marcus Geiger
+#+OPTIONS: ^:nil
+
+* Socket exception exits process
+#+BEGIN_EXAMPLE
+  2016-01-21 15:53:17,769 1053 wcollector - Influxdb - DEBUG - Will store rh_true,station=1 value=62.280000
+  Traceback (most recent call last):
+    File "./wcollector", line 249, in <module>
+      main()
+    File "./wcollector", line 242, in main
+      weather_processor.process_input(line)
+    File "./wcollector", line 110, in process_input
+      self.json_consumer(js)
+    File "./wcollector", line 162, in json_consumer
+      self._database.store_value(station_id, k, v)
+    File "./wcollector", line 178, in store_value
+      request = conn.request("POST", "/write?db=%s" % self._db, body, headers)
+    File "/usr/lib/python2.7/httplib.py", line 1001, in request
+      self._send_request(method, url, body, headers)
+    File "/usr/lib/python2.7/httplib.py", line 1035, in _send_request
+      self.endheaders(body)
+    File "/usr/lib/python2.7/httplib.py", line 997, in endheaders
+      self._send_output(message_body)
+    File "/usr/lib/python2.7/httplib.py", line 850, in _send_output
+      self.send(msg)
+    File "/usr/lib/python2.7/httplib.py", line 812, in send
+      self.connect()
+    File "/usr/lib/python2.7/httplib.py", line 793, in connect
+      self.timeout, self.source_address)
+    File "/usr/lib/python2.7/socket.py", line 571, in create_connection
+      raise err
+  socket.error: [Errno 111] Connection refused
+#+END_EXAMPLE
