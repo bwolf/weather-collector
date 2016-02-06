@@ -1,2 +1,2 @@
 #!/bin/sh
-scp wcollector erlkampi2.fritz.box:go-wcollector
+scp wcollector pi@asp02.g.erlkam18a.de:go-wcollector
