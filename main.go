@@ -16,11 +16,11 @@ import (
 
 var logger *log.Logger
 
-func storeWeather(db *db.DB, weather *data.Weather) error {
+func storeWeather(d db.DB, weather *data.Weather) error {
 	for _, meas := range weather.Measurements() {
-		db.AddValue(weather.StationId(), meas.Name, meas.Value)
+		d.AddValue(weather.StationId(), meas.Name, meas.Value)
 	}
-	return db.Post()
+	return d.Save()
 }
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 	baudRate := flag.Int("baud", 4800, "Baudrate of serial device (default 4800)")
 	influxHost := flag.String("influxhost", "localhost", "Influxdb hostname")
 	influxPort := flag.Int("influxport", 8086, "Influxdb port")
-	influxDb := flag.String("influxdbname", "weather", "Influxdb DB name")
+	influxDBName := flag.String("influxdbname", "weather", "Influxdb DB name")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s\n", path.Base(os.Args[0]))
@@ -55,9 +55,9 @@ func main() {
 
 	// TODO reopen logfile on SIGHUP or some other signal
 
-	db := db.NewDB(*influxHost, *influxPort, *influxDb)
-
 	// Main logic
+	db := db.NewInfluxDBClient(*influxHost, *influxPort, *influxDBName)
+
 	err, in := input.OpenUART(*deviceName, *baudRate)
 	if err != nil {
 		log.Fatal(err)

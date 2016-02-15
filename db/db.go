@@ -6,35 +6,40 @@ import (
 	"net/http"
 )
 
-// Weather db (InfluxDB) client
-type DB struct {
-	influxUrl string
-	data      bytes.Buffer
+type DB interface {
+	AddValue(stationId int, key string, value float64)
+	Save() error
 }
 
-func NewDB(host string, port int, dbName string) *DB {
+// InfluxDB client for weather data
+type InfluxDBClient struct {
+	url  string
+	data bytes.Buffer
+}
+
+func NewInfluxDBClient(host string, port int, dbName string) *InfluxDBClient {
 	url := fmt.Sprintf("http://%s:%d/write?db=%s", host, port, dbName)
-	return &DB{influxUrl: url}
+	return &InfluxDBClient{url: url}
 }
 
-// see https://influxdb.com/docs/v0.9/guides/writing_data.html
-func (db *DB) AddValue(stationId int, key string, value float64) {
-	fmt.Fprintf(&db.data, "%s,station=%d value=%f\n", key, stationId, value)
+func (ic *InfluxDBClient) AddValue(stationId int, key string, value float64) {
+	// see https://influxdb.com/docs/v0.9/guides/writing_data.html
+	fmt.Fprintf(&ic.data, "%s,station=%d value=%f\n", key, stationId, value)
 }
 
-func (db *DB) Post() error {
-	resp, err := http.Post(db.influxUrl, "text/plain", &db.data)
+func (ic *InfluxDBClient) Save() error {
+	resp, err := http.Post(ic.url, "text/plain", &ic.data)
 	if err != nil {
-		return fmt.Errorf("HTTP POST failed to InfluxDB: %v", err)
+		return fmt.Errorf("HTTP POST to InfluxDB failed: %v", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("HTTP POST failed to InfluxDB: %s\n", resp.Status)
+		return fmt.Errorf("HTTP POST to InfluxDB failed: %s\n", resp.Status)
 	}
 
-	db.data.Reset()
+	ic.data.Reset()
 
 	return nil
 }
