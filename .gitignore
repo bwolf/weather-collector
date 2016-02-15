@@ -1,5 +1,7 @@
 /TAGS
-.projectile
 /wcollector
 /wcollector.test
+/.idea
+.projectile
 *.log
+*.iml

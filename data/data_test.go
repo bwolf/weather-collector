@@ -1,58 +1,34 @@
-package main
+package data
 
 import (
 	"fmt"
-	"log"
 	"math"
-	"os"
 	"strings"
 	"testing"
 )
-
-func TestMain(m *testing.M) {
-	logger = log.New(os.Stdout, "[test] ", log.LstdFlags)
-	os.Exit(m.Run())
-}
-
-func TestMetricSystem(t *testing.T) {
-	const num float64 = 6.25
-	cases := []struct {
-		prefix string
-		want   float64
-	}{
-		{"k", 62500},
-		{"", 6.25},
-		{"c", 0.625},
-	}
-	for _, c := range cases {
-		got := scaleByMetricSystemPrefix(num, c.prefix)
-		if got != c.want {
-			t.Errorf("Scaling (%f, %q) == %f, want %f", num, c.prefix, got, c.want)
-		}
-	}
-}
 
 func TestCalcDewPoint(t *testing.T) {
 	const temp = 10.02
 	const rhTrue = 90.0
 	dp := calcDewPoint(rhTrue, temp)
 	fmt.Println("Dew-Point is", dp)
+
 	// Don't compare floats; Use rounded int instead
-	dpint := int(math.Floor(dp*10 + 0.5))
+	dpRounded := int(math.Floor(dp*10 + 0.5))
 
 	const want = 85
-	if dpint != want {
+	if dpRounded != want {
 		t.Errorf("calcDewPoint(%v, %v), got %v want %v", rhTrue, temp, dp, want)
 	}
 }
 
 func TestJsonProcessing(t *testing.T) {
 	data := []byte(`{"weather": {"station-id": 1, "temp_m": 1002, "rh-true_m": 9001, "rain-cupfills": 1}}`)
-	err, json := parseJson(data)
+	err, json := ParseJson(data)
 	if err != nil {
 		t.Errorf("Json parse failed %v", err)
 	}
-	err, weather := parseWeather(json)
+	err, weather := ParseWeather(json)
 	if err != nil {
 		t.Errorf("Failed parsing weather, got %v", err)
 	}
@@ -65,14 +41,14 @@ func TestJsonProcessing(t *testing.T) {
 		t.Errorf("Got %d measurements, want %d", len(weather.measurements), 2)
 	}
 
-	orignalLength := len(weather.measurements)
-	lazyMonkeyPatchDewPoint(weather)
-	if 1+orignalLength != len(weather.measurements) {
+	originalLength := len(weather.measurements)
+	LazyMonkeyPatchDewPoint(weather)
+	if 1+ originalLength != len(weather.measurements) {
 		t.Error("Failed to monkey patch dew point")
 	}
 	haveDewPoint := false
 	for _, m := range weather.measurements {
-		if m.name == "dew_point" {
+		if m.Name == "dew_point" {
 			haveDewPoint = true
 		}
 	}
@@ -82,8 +58,8 @@ func TestJsonProcessing(t *testing.T) {
 	fmt.Printf("With dew-point %+v\n", weather)
 
 	for _, m := range weather.measurements {
-		if strings.Contains(m.name, "-") {
-			t.Errorf("Found measurement with illegal name %s, should be in the form one_two", m.name)
+		if strings.Contains(m.Name, "-") {
+			t.Errorf("Found measurement with illegal name %s, should be in the form one_two", m.Name)
 		}
 	}
 }
