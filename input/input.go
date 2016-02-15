@@ -1,6 +1,6 @@
 package input
 
 type Input interface {
-	ReadLine() ([]byte, error)
+	ReadLine() (error, []byte)
 	Close()
 }

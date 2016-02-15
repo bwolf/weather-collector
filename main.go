@@ -23,6 +23,37 @@ func storeWeather(d db.DB, weather *data.Weather) error {
 	return d.Save()
 }
 
+func processInput(in input.Input, d db.DB) {
+	for {
+		err, line := in.ReadLine()
+		if err == nil {
+			line = bytes.TrimSpace(line)
+			if !bytes.HasPrefix(line, []byte("# ")) {
+				err, json := data.ParseJson(line)
+				if err != nil {
+					logger.Printf("Cannot process line '%s', because of: %v\n", line, err)
+				}
+				err, weather := data.ParseWeather(json)
+				if err != nil {
+					logger.Printf("Cannot parse weather %v\n", err)
+				}
+				logger.Println("Lazy patching in dew point")
+				data.LazyMonkeyPatchDewPoint(weather)
+				logger.Printf("Patched %+v\n", weather)
+
+				if err := storeWeather(d, weather); err != nil {
+					logger.Printf("Failed storing values: %v\n", err)
+				}
+			}
+		} else {
+			if err != io.EOF {
+				logger.Printf("I/O error: %v\n", err)
+			}
+			break
+		}
+	}
+}
+
 func main() {
 	// Flag setup
 	verbose := flag.Bool("verbose", false, "Verbose processing (default false)")
@@ -64,27 +95,5 @@ func main() {
 	}
 	defer in.Close()
 
-	for {
-		err, line := in.ReadLine()
-		if err == nil {
-			line = bytes.TrimSpace(line)
-			if !bytes.HasPrefix(line, []byte("# ")) {
-				err, json := data.ParseJson(line)
-				if err != nil {
-					logger.Printf("Cannot process line '%s', because of: %v\n", line, err)
-				}
-				err, weather := data.ParseWeather(json)
-				if err != nil {
-					logger.Printf("Cannot parse weather %v\n", err)
-				}
-				logger.Println("Lazy patching in dew point")
-				data.LazyMonkeyPatchDewPoint(weather)
-				logger.Printf("Patched %+v\n", weather)
-
-				if err := storeWeather(db, weather); err != nil {
-					logger.Printf("Failed storing values: %v\n", err)
-				}
-			}
-		}
-	}
+	processInput(in, db)
 }
