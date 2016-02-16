@@ -46,7 +46,7 @@ func (d *MockDB) Save() error {
 	return nil
 }
 
-func TestMain(t *testing.T) {
+func TestMain(m *testing.M) {
 	s := "{ \"weather\": { \"station-id\": 1, \"temp_m\": 727, " +
 		"\"rh-true_m\": 7223, \"pressure-nn_c\": 10078, \"rain-cupfills\": 133 } }"
 

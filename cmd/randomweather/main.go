@@ -47,13 +47,6 @@ func (in *RandomInput) ReadLine() (error, []byte) {
 
 func (in *RandomInput) Close() {}
 
-func storeWeather(d db.DB, weather *data.Weather) error {
-	for _, meas := range weather.Measurements() {
-		d.AddValue(weather.StationId(), meas.Name, meas.Value)
-	}
-	return d.Save()
-}
-
 func main() {
 	var logger *log.Logger = log.New(os.Stdout, "[wcollector] ", log.LstdFlags)
 
