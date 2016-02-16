@@ -4,3 +4,4 @@
 .projectile
 *.log
 wcollector
+/cmd/randomweather/randomweather
