@@ -1,7 +1,7 @@
 /TAGS
 /.idea
 *.iml
-.projectile
 *.log
-wcollector
+*.test
+/cmd/wcollector/wcollector
 /cmd/randomweather/randomweather
