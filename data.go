@@ -1,10 +1,9 @@
-package data
+package main
 
 import (
-	"bitbucket.org/mgeiger/wcollector/metricsystem"
-
 	"encoding/json"
 	"fmt"
+	"github.com/bwolf/metricsystem"
 	"math"
 	"strings"
 )
@@ -42,7 +41,7 @@ func calcDewPoint(humid, temp float64) float64 {
 func normalizeMeasurement(m *Measurement) *Measurement {
 	index := strings.LastIndex(m.Name, "_")
 	if index == -1 {
-		fmt.Println("Nothing to normalize for key", m.Name)
+		// fmt.Println("Nothing to normalize for key", m.Name)
 		newName := strings.Replace(m.Name, "-", "_", -1)
 		return &Measurement{Name: newName, Value: m.Value}
 	}
@@ -80,8 +79,8 @@ func LazyMonkeyPatchDewPoint(weather *Weather) {
 
 	if gotRhTrue && gotTemp {
 		dp := calcDewPoint(rhTrue.Value, temp.Value)
-		fmt.Printf("Dew point from h %f, t %f: %f will be patched in\n",
-			rhTrue.Value, temp.Value, dp)
+		// fmt.Printf("Dew point from h %f, t %f: %f will be patched in\n",
+		// rhTrue.Value, temp.Value, dp)
 
 		weather.measurements = append(weather.measurements,
 			Measurement{Name: "dew_point", Value: dp})
@@ -105,7 +104,6 @@ func ParseWeather(js interface{}) (error, *Weather) {
 		case int:
 			return fmt.Errorf("%s is unsupported int %d", k, vv), nil
 		case float64:
-			fmt.Println(k, "is float64", vv)
 			if k == "station-id" { // Decoded as float64, also look like int
 				weather.stationId = int(vv)
 			} else {

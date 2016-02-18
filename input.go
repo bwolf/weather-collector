@@ -2,14 +2,59 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"github.com/tarm/serial"
 	"math/rand"
-	"os"
 	"time"
-
-	"bitbucket.org/mgeiger/wcollector/data"
-	"bitbucket.org/mgeiger/wcollector/db"
 )
+
+type Input interface {
+	ReadLine() (error, []byte)
+	Close()
+}
+
+// UART input
+
+//noinspection SpellCheckingInspection
+type UART struct {
+	port *serial.Port
+}
+
+func OpenUART(device string, baudRate int) (error, *UART) {
+	c := &serial.Config{Name: device, Baud: baudRate}
+
+	port, err := serial.OpenPort(c)
+	if err != nil {
+		return fmt.Errorf("Can't open serial device %s: %v", device, err), nil
+	}
+
+	return nil, &UART{port: port}
+}
+
+func (u *UART) ReadLine() (error, []byte) {
+	buf := make([]byte, 0)
+	idx := 0
+	for {
+		charBuf := make([]byte, 1)
+		n, err := u.port.Read(charBuf)
+		if err != nil || n != 1 {
+			return err, nil
+		}
+
+		ch := charBuf[0]
+		buf = append(buf, ch)
+		idx++
+
+		if len(buf) > 2 && buf[len(buf)-2] == '\r' && buf[len(buf)-1] == '\n' {
+			return nil, buf[:idx]
+		}
+	}
+}
+
+func (u *UART) Close() {
+	u.port.Close()
+}
+
+// Random input
 
 type RandomInput struct {
 	src *rand.Rand
@@ -46,12 +91,3 @@ func (in *RandomInput) ReadLine() (error, []byte) {
 }
 
 func (in *RandomInput) Close() {}
-
-func main() {
-	var logger *log.Logger = log.New(os.Stdout, "[wcollector] ", log.LstdFlags)
-
-	in := NewRandomInput()
-	db := db.NewInfluxDBClient("localhost", 8086, "rndweather")
-
-	data.Consume(in, db, logger)
-}

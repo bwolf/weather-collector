@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 )
 
 type MockInput struct {
@@ -34,23 +35,33 @@ type MockDB struct {
 	data bytes.Buffer
 }
 
+func (d *MockDB) Query(query string) (error, *InfluxQueryResult) {
+	fmt.Printf("Would GET %v\n", query)
+	var r InfluxQueryResult
+	return nil, &r
+}
+
 func (d *MockDB) AddValue(stationId int, key string, value float64) {
 	fmt.Fprintf(&d.data, "%s,station=%d value=%f\n", key, stationId, value)
 }
 
+func (d *MockDB) AddText(key, value string, timestamp time.Time) {
+	fmt.Fprintf(&d.data, "%s text=\"%s\" %d", key, value, timestamp.UnixNano())
+}
+
 func (d *MockDB) Save() error {
-	fmt.Printf("Would POST %v", d.data.String())
+	fmt.Printf("Would POST %v\n", d.data.String())
 	d.data.Reset()
 	return nil
 }
 
-func TestMain(t *testing.T) {
+func TestMain(m *testing.M) {
 	s := "{ \"weather\": { \"station-id\": 1, \"temp_m\": 727, " +
 		"\"rh-true_m\": 7223, \"pressure-nn_c\": 10078, \"rain-cupfills\": 133 } }"
 
-	logger = log.New(os.Stdout, "", log.LstdFlags)
 	in := NewMockInput([][]byte{[]byte(s)})
 	db := &MockDB{}
+	logger := log.New(os.Stdout, "", log.LstdFlags)
 
-	processInput(in, db)
+	Consume(in, db, logger)
 }

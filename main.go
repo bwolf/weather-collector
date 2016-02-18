@@ -1,67 +1,26 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path"
-
-	"bitbucket.org/mgeiger/wcollector/data"
-	"bitbucket.org/mgeiger/wcollector/db"
-	"bitbucket.org/mgeiger/wcollector/input"
+	"time"
 )
-
-var logger *log.Logger
-
-func storeWeather(d db.DB, weather *data.Weather) error {
-	for _, meas := range weather.Measurements() {
-		d.AddValue(weather.StationId(), meas.Name, meas.Value)
-	}
-	return d.Save()
-}
-
-func processInput(in input.Input, d db.DB) {
-	for {
-		err, line := in.ReadLine()
-		if err == nil {
-			line = bytes.TrimSpace(line)
-			if !bytes.HasPrefix(line, []byte("# ")) {
-				err, json := data.ParseJson(line)
-				if err != nil {
-					logger.Printf("Cannot process line '%s', because of: %v\n", line, err)
-				}
-				err, weather := data.ParseWeather(json)
-				if err != nil {
-					logger.Printf("Cannot parse weather %v\n", err)
-				}
-				logger.Println("Lazy patching in dew point")
-				data.LazyMonkeyPatchDewPoint(weather)
-				logger.Printf("Patched %+v\n", weather)
-
-				if err := storeWeather(d, weather); err != nil {
-					logger.Printf("Failed storing values: %v\n", err)
-				}
-			}
-		} else {
-			if err != io.EOF {
-				logger.Printf("I/O error: %v\n", err)
-			}
-			break
-		}
-	}
-}
 
 func main() {
 	// Flag setup
 	verbose := flag.Bool("verbose", false, "Verbose processing (default false)")
+	randomize := flag.Bool("randomize", false, "Random input (default false)")
 	deviceName := flag.String("device", "/dev/ttyAMA0", "Device or filename (default ttyAMA0)")
 	baudRate := flag.Int("baud", 4800, "Baudrate of serial device (default 4800)")
 	influxHost := flag.String("influxhost", "localhost", "Influxdb hostname")
 	influxPort := flag.Int("influxport", 8086, "Influxdb port")
 	influxDBName := flag.String("influxdbname", "weather", "Influxdb DB name")
+	latitude := flag.Float64("latitude", 48.137222, "Geographic latitude (default 48.137222, munich)")
+	longitude := flag.Float64("longitude", 11.575556, "Geographic latitude (default 11.575556, munich)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s\n", path.Base(os.Args[0]))
@@ -71,6 +30,7 @@ func main() {
 
 	// Logging setup
 	logFilename := "wcollector.log"
+
 	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Panicf("Failed to open logfile %s for writing: %v\n", logFilename, err)
@@ -81,19 +41,43 @@ func main() {
 	if *verbose {
 		logWriter = io.MultiWriter(logfile, os.Stdout)
 	}
-	logger = log.New(logWriter, "[wcollector] ", log.LstdFlags)
+
+	var logger *log.Logger = log.New(logWriter, "[wcollector] ", log.LstdFlags)
 	log.Println("Starting up")
 
-	// TODO reopen logfile on SIGHUP or some other signal
-
 	// Main logic
-	db := db.NewInfluxDBClient(*influxHost, *influxPort, *influxDBName)
+	tsdb := NewInfluxDBClient(*influxHost, *influxPort, *influxDBName)
+	if *verbose {
+		tsdb.SetDebug(true)
+	}
 
-	err, in := input.OpenUART(*deviceName, *baudRate)
-	if err != nil {
-		log.Fatal(err)
+	var in Input
+	if *randomize {
+		in = NewRandomInput()
+	} else {
+		err, in = OpenUART(*deviceName, *baudRate)
+		if err != nil {
+			logger.Fatal(err)
+		}
 	}
 	defer in.Close()
 
-	processInput(in, db)
+	// Sun rise and set calculation
+	go func() {
+		for {
+			logger.Println("Sun rise/set calculation")
+			for i := 0; i < 10; i++ { // For -5 to +5 days from now
+				day := time.Now().AddDate(0, 0, (-5 + i))
+				err := EnsureSunRiseAndSet(tsdb, day, *latitude, *longitude)
+				if err != nil {
+					logger.Printf("Failed ensuring sun information: %v\n", err)
+				}
+			}
+
+			time.Sleep(30 * time.Minute)
+		}
+	}()
+
+	// Loop over input, process data, store in DB
+	Consume(in, tsdb, logger)
 }

@@ -3,5 +3,3 @@
 *.iml
 *.log
 *.test
-/cmd/wcollector/wcollector
-/cmd/randomweather/randomweather
