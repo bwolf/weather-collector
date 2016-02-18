@@ -45,12 +45,13 @@ func main() {
 	var logger *log.Logger = log.New(logWriter, "[wcollector] ", log.LstdFlags)
 	log.Println("Starting up")
 
-	// Main logic
+	// TSDB client
 	tsdb := NewInfluxDBClient(*influxHost, *influxPort, *influxDBName)
 	if *verbose {
 		tsdb.SetDebug(true)
 	}
 
+	// Input source
 	var in Input
 	if *randomize {
 		in = NewRandomInput()
@@ -78,6 +79,6 @@ func main() {
 		}
 	}()
 
-	// Loop over input, process data, store in DB
+	// Loop over input, process data, store in TSDB
 	Consume(in, tsdb, logger)
 }
