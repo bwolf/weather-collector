@@ -45,8 +45,12 @@ func (d *MockDB) AddValue(stationId int, key string, value float64) {
 	fmt.Fprintf(&d.data, "%s,station=%d value=%f\n", key, stationId, value)
 }
 
-func (d *MockDB) AddText(key, value string, timestamp time.Time) {
-	fmt.Fprintf(&d.data, "%s text=\"%s\" %d", key, value, timestamp.UnixNano())
+func (ic *MockDB) AddText(key, value string, tags []TSDBTuple, timestamp time.Time) {
+	var b bytes.Buffer
+	for _, el := range tags {
+		fmt.Fprintf(&b, ",%s=%s", el.key, el.val) // First colon separates measurement from tags
+	}
+	fmt.Fprintf(&ic.data, "%s%s text=\"%s\" %d", key, b.String(), value, timestamp.UnixNano())
 }
 
 func (d *MockDB) Save() error {
