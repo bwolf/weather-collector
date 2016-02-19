@@ -48,9 +48,14 @@ func Consume(in Input, db TSDBClient, logger *log.Logger) {
 }
 
 // Use Grafana query 'SELECT * FROM "sun" WHERE $timeFilter' to get the annoation.
-func EnsureSunRiseAndSet(db TSDBClient, day time.Time, lat, lon float64) error {
+func EnsureSunRiseAndSet(db TSDBClient, day time.Time, lat, lon float64, location string) error {
 	geo := suncal.GeoCoordinates{Latitude: lat, Longitude: lon}
 	sunInfo := suncal.SunCal(geo, day)
+
+	var tags []TSDBTuple
+	tags = append(tags, TSDBTuple{key: "lat", val: fmt.Sprintf("%f", lat)})
+	tags = append(tags, TSDBTuple{key: "lon", val: fmt.Sprintf("%f", lon)})
+	tags = append(tags, TSDBTuple{key: "location", val: location})
 
 	for i, t := range []time.Time{sunInfo.Rise, sunInfo.Set} {
 		err, res := db.Query(fmt.Sprintf("SELECT * FROM sun WHERE time = '%s'", t.Format(time.RFC3339)))
@@ -70,7 +75,7 @@ func EnsureSunRiseAndSet(db TSDBClient, day time.Time, lat, lon float64) error {
 			text = "Set"
 		}
 
-		db.AddText("sun", text, t)
+		db.AddText("sun", text, tags, t)
 		err = db.Save()
 		if err != nil {
 			return fmt.Errorf("Failed saving sun info: %v\n", err)

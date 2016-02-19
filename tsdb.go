@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// Query result of InfluxDB
 type InfluxQueryResult struct {
 	Results []struct {
 		Series []struct {
@@ -22,10 +23,17 @@ type InfluxQueryResult struct {
 	} `json:"results"`
 }
 
+// Tuple with key and value
+type TSDBTuple struct {
+	key string
+	val string
+}
+
+// Timeseries DB interface
 type TSDBClient interface {
 	Query(query string) (error, *InfluxQueryResult)
 	AddValue(stationId int, key string, value float64)
-	AddText(key, value string, timestamp time.Time)
+	AddText(key, value string, tags []TSDBTuple, timestamp time.Time)
 	Save() error
 }
 
@@ -37,25 +45,34 @@ type InfluxDBClient struct {
 	debug     bool
 }
 
+// Create an InfluxDB client for a specific database
 func NewInfluxDBClient(host string, port int, dbName string) *InfluxDBClient {
 	insertUrl := fmt.Sprintf("http://%s:%d/write?db=%s", host, port, dbName)
 	queryUrl := fmt.Sprintf("http://%s:%d/query?db=%s", host, port, dbName)
 	return &InfluxDBClient{insertUrl: insertUrl, queryUrl: queryUrl}
 }
 
+// Enable or disable debug printing
 func (ic *InfluxDBClient) SetDebug(flag bool) {
 	ic.debug = flag
 }
 
+// Add value to the set of values which are stored by the Save() method.
 func (ic *InfluxDBClient) AddValue(stationId int, key string, value float64) {
 	// see https://influxdb.com/docs/v0.9/guides/writing_data.html
 	fmt.Fprintf(&ic.data, "%s,station=%d value=%f\n", key, stationId, value)
 }
 
-func (ic *InfluxDBClient) AddText(key, value string, timestamp time.Time) {
-	fmt.Fprintf(&ic.data, "%s text=\"%s\" %d", key, value, timestamp.UnixNano())
+// Add text value to the set of values which are stored by the Save() method.
+func (ic *InfluxDBClient) AddText(key, value string, tags []TSDBTuple, timestamp time.Time) {
+	var b bytes.Buffer
+	for _, el := range tags {
+		fmt.Fprintf(&b, ",%s=%s", el.key, el.val) // First colon separates measurement from tags
+	}
+	fmt.Fprintf(&ic.data, "%s%s text=\"%s\" %d", key, b.String(), value, timestamp.UnixNano())
 }
 
+// Save stored values.
 func (ic *InfluxDBClient) Save() error {
 	requ, errReq := http.NewRequest("POST", ic.insertUrl, strings.NewReader(ic.data.String()))
 	if errReq != nil {
@@ -84,6 +101,7 @@ func (ic *InfluxDBClient) Save() error {
 	return nil
 }
 
+// Query database.
 func (ic *InfluxDBClient) Query(query string) (error, *InfluxQueryResult) {
 	url := fmt.Sprintf("%s&q=%s", ic.queryUrl, url.QueryEscape(query))
 	resp, err := http.Get(url)

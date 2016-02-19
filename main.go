@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	SunSyncDaysPast = 5
+)
+
 func main() {
 	// Flag setup
 	verbose := flag.Bool("verbose", false, "Verbose processing (default false)")
@@ -21,6 +25,7 @@ func main() {
 	influxDBName := flag.String("influxdbname", "weather", "Influxdb DB name")
 	latitude := flag.Float64("latitude", 48.137222, "Geographic latitude (default 48.137222, munich)")
 	longitude := flag.Float64("longitude", 11.575556, "Geographic latitude (default 11.575556, munich)")
+	location := flag.String("location", "munich", "Geographic location (default 'munich')")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s\n", path.Base(os.Args[0]))
@@ -67,11 +72,11 @@ func main() {
 	go func() {
 		for {
 			logger.Println("Sun rise/set calculation")
-			for i := 0; i < 10; i++ { // For -5 to +5 days from now
-				day := time.Now().AddDate(0, 0, (-5 + i))
-				err := EnsureSunRiseAndSet(tsdb, day, *latitude, *longitude)
+			for i := 0; i < 2*SunSyncDaysPast; i++ { // For -5 to +5 days from now
+				day := time.Now().AddDate(0, 0, (-SunSyncDaysPast + i))
+				err := EnsureSunRiseAndSet(tsdb, day, *latitude, *longitude, *location)
 				if err != nil {
-					logger.Printf("Failed ensuring sun information: %v\n", err)
+					logger.Printf("Error: Failed ensuring sun information: %v\n", err)
 				}
 			}
 
