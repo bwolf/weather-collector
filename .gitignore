@@ -3,4 +3,4 @@
 *.iml
 *.log
 *.test
-/wcollector
+/weather-collector
