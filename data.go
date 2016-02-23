@@ -26,6 +26,7 @@ func (weather *Weather) Measurements() []Measurement {
 	return weather.measurements
 }
 
+// Based on Sensiron data sheet for SHT7x (http://is.gd/i8rS20).
 func calcDewPoint(humid, temp float64) float64 {
 	m := 17.62
 	tn := 243.12
