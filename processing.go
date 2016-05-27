@@ -25,10 +25,12 @@ func Consume(in Input, db TSDBClient, logger *log.Logger) {
 				err, json := ParseJson(line)
 				if err != nil {
 					logger.Printf("Cannot process line '%s', because of: %v\n", line, err)
+					continue
 				}
 				err, weather := ParseWeather(json)
 				if err != nil {
 					logger.Printf("Cannot parse weather %v\n", err)
+					continue
 				}
 				logger.Println("Lazy patching in dew point")
 				LazyMonkeyPatchDewPoint(weather)
