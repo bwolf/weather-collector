@@ -34,7 +34,7 @@ func main() {
 	flag.Parse()
 
 	// Logging setup
-	logFilename := "wcollector.log"
+	logFilename := "weather-collector.log"
 
 	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
