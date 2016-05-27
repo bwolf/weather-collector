@@ -3,4 +3,6 @@
 *.iml
 *.log
 *.test
+*.deb
+/tmp
 /weather-collector

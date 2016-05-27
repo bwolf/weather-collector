@@ -1,0 +1,47 @@
+#!/bin/sh
+# postinst script for weather-collector on Debian
+set -e
+
+SCRIPT_DIR=/usr/lib/weather-collector
+
+install_systemd() {
+    cp -f $SCRIPT_DIR/weather-collector.service /lib/systemd/system/weather-collector.service
+    systemctl enable weather-collector || true
+    systemctl daemon-reload || true
+}
+
+case "$1" in
+    configure)
+        WEATHER_USER=weather
+        WEATHER_GROUP=weather
+
+        if ! getent group "$WEATHER_GROUP" > /dev/null; then
+            addgroup --system --quiet "$WEATHER_GROUP"
+        fi
+        if ! id "$WEATHER_USER" >/dev/null 2>&1 ; then
+            adduser --system --quiet --home / --no-create-home \
+                --ingroup "$WEATHER_GROUP" --disabled-password --shell /usr/sbin/nologin \
+                --gecos 'Weather User' \
+                "$WEATHER_USER"
+        fi
+
+        mkdir -p /var/log/weather
+        chown -R $WEATHER_USER:$WEATHER_GROUP /var/log/weather
+        chmod 0775 /var/log/weather
+
+        install_systemd
+        systemctl restart weather-collector || echo "WARNING: systemd OR weather-collector not running"
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0
+
+

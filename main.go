@@ -26,6 +26,7 @@ func main() {
 	latitude := flag.Float64("latitude", 48.137222, "Geographic latitude (default 48.137222, munich)")
 	longitude := flag.Float64("longitude", 11.575556, "Geographic latitude (default 11.575556, munich)")
 	location := flag.String("location", "munich", "Geographic location (default 'munich')")
+	logFilename := flag.String("logfile", "/var/log/weather/collector.log", "Logfile fully qualified path")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s\n", path.Base(os.Args[0]))
@@ -34,9 +35,7 @@ func main() {
 	flag.Parse()
 
 	// Logging setup
-	logFilename := "weather-collector.log"
-
-	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	logfile, err := os.OpenFile(*logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Panicf("Failed to open logfile %s for writing: %v\n", logFilename, err)
 	}
