@@ -7,7 +7,7 @@ readonly go_version=go1.6.2
 readonly weather_collector_src=github.com/bwolf/weather-collector
 readonly weather_collector_arch=armhf
 readonly weather_collector_platform=linux
-readonly weather_collector_version=0.0.1
+readonly weather_collector_version=0.1.0
 readonly weather_collector_iteration=1
 readonly weather_collector_url=http://$weather_collector_src
 
@@ -47,16 +47,18 @@ readonly package_dir=tmp
 rm -f $package_file &&
 cd $GOPATH/src/$weather_collector_src &&
     rm -rf $package_dir &&
-    mkdir -p $package_dir/bin &&
-    mkdir -p $package_dir/lib/weather-collector &&
-    cp -a weather-collector $package_dir/bin &&
-    cp -a weather-collector.service $package_dir/lib/weather-collector &&
+    mkdir -p $package_dir/usr/bin &&
+    mkdir -p $package_dir/usr/lib/weather-collector &&
+    mkdir -p $package_dir/etc/logrotate.d &&
+    cp -a weather-collector $package_dir/usr/bin &&
+    cp -a weather-collector.service $package_dir/usr/lib/weather-collector &&
+    cp -a logrotate.conf $package_dir/etc/logrotate.d/weather-collector &&
     fpm -s dir -t deb -C $package_dir \
-        --prefix /usr \
         --name weather-collector \
         --version $weather_collector_version \
         --iteration $weather_collector_iteration \
         --no-depends \
+        --deb-no-default-config-files \
         --no-auto-depends \
         --architecture $weather_collector_arch \
         --url $weather_collector_url \
