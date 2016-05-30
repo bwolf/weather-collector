@@ -20,10 +20,14 @@ case "$1" in
         fi
         if ! id "$WEATHER_USER" >/dev/null 2>&1 ; then
             adduser --system --quiet --home / --no-create-home \
-                --ingroup "$WEATHER_GROUP" --disabled-password --shell /usr/sbin/nologin \
+                --ingroup "$WEATHER_GROUP" \
+                --disabled-password --shell /usr/sbin/nologin \
                 --gecos 'Weather User' \
                 "$WEATHER_USER"
         fi
+
+        # Add user to dialout group to permit serial access to /dev/ttyAMA0
+        usermod -G dialout $WEATHER_USER
 
         mkdir -p /var/log/weather
         chown -R $WEATHER_USER:$WEATHER_GROUP /var/log/weather
